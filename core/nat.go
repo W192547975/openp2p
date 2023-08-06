@@ -67,7 +67,7 @@ func natTest(serverHost string, serverPort int, localPort int) (publicIP string,
 	}
 
 	// The connection can write data to the desired address.
-	msg, err := newMessage(MsgNATDetect, 0, nil)
+	msg, _ := newMessage(MsgNATDetect, 0, nil)
 	_, err = conn.WriteTo(msg, dst)
 	if err != nil {
 		return "", 0, err
@@ -171,11 +171,10 @@ func publicIPTest(publicIP string, echoPort int) (hasPublicIP int, hasUPNPorNATP
 			break
 		}
 		conn.WriteTo([]byte("echo"), dst)
-		buf := make([]byte, 1600)
 
 		// wait for echo testing
 		conn.SetReadDeadline(time.Now().Add(PublicIPEchoTimeout))
-		_, _, err = conn.ReadFromUDP(buf)
+		_, _, err = conn.ReadFromUDP(make([]byte, 1600))
 		if err == nil {
 			if i == 1 {
 				gLog.Println(LvDEBUG, "UPNP or NAT-PMP:YES")
