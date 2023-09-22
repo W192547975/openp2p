@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"time"
@@ -50,6 +49,8 @@ func handlePush(pn *P2PNetwork, subType uint16, msg []byte) error {
 				// notify peer relay ready
 				msg := TunnelMsg{ID: t.id}
 				pn.push(r.From, MsgPushAddRelayTunnelRsp, msg)
+			} else {
+				pn.push(r.From, MsgPushAddRelayTunnelRsp, "error") // compatible with old version client, trigger unmarshal error
 			}
 		}(req)
 	case MsgPushAPPKey:
@@ -61,16 +62,7 @@ func handlePush(pn *P2PNetwork, subType uint16, msg []byte) error {
 		SaveKey(req.AppID, req.AppKey)
 	case MsgPushUpdate:
 		gLog.Println(LvINFO, "MsgPushUpdate")
-		update(pn.config.ServerHost, pn.config.ServerPort) // download new version first, then exec ./openp2p update
-		targetPath := filepath.Join(defaultInstallPath, defaultBinName)
-		args := []string{"update"}
-		env := os.Environ()
-		cmd := exec.Command(targetPath, args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		cmd.Stdin = os.Stdin
-		cmd.Env = env
-		err := cmd.Run()
+		err := update(pn.config.ServerHost, pn.config.ServerPort)
 		if err == nil {
 			os.Exit(0)
 		}
@@ -123,7 +115,7 @@ func handlePush(pn *P2PNetwork, subType uint16, msg []byte) error {
 		pn.msgMapMtx.Lock()
 		ch := pn.msgMap[pushHead.From]
 		pn.msgMapMtx.Unlock()
-		ch <- msg
+		ch <- pushMsg{data: msg, ts: time.Now()}
 	}
 	return err
 }
@@ -139,6 +131,7 @@ func handleEditApp(pn *P2PNetwork, subType uint16, msg []byte) (err error) {
 	// protocol0+srcPort0 exist, delApp
 	oldConf.AppName = newApp.AppName
 	oldConf.Protocol = newApp.Protocol0
+	oldConf.Whitelist = newApp.Whitelist
 	oldConf.SrcPort = newApp.SrcPort0
 	oldConf.PeerNode = newApp.PeerNode
 	oldConf.DstHost = newApp.DstHost
@@ -235,6 +228,7 @@ func handleReportApps(pn *P2PNetwork, subType uint16, msg []byte) (err error) {
 			AppName:     config.AppName,
 			Error:       config.errMsg,
 			Protocol:    config.Protocol,
+			Whitelist:   config.Whitelist,
 			SrcPort:     config.SrcPort,
 			RelayNode:   relayNode,
 			RelayMode:   relayMode,
