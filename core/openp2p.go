@@ -89,6 +89,6 @@ func run(baseDir string, beforeStart, afterStart func() bool) *P2PNetwork {
 		gLog.Println(LvERROR, "P2PNetwork login error")
 		return nil
 	}
-	//gLog.Println(LvINFO, "waiting for connection...")
+	// gLog.Println(LvINFO, "waiting for connection...")
 	return network
 }
