@@ -65,12 +65,6 @@ func RunAsModule(baseDir string, token string, bw int, logLevel int) *P2PNetwork
 	}, nil)
 }
 
-func GetToken(baseDir string) string {
-	os.Chdir(baseDir)
-	gConf.load()
-	return fmt.Sprintf("%d", gConf.Network.Token)
-}
-
 func run(baseDir string, beforeStart, afterStart func() bool) *P2PNetwork {
 	rand.Seed(time.Now().UnixNano())
 	os.Chdir(baseDir) // for system service
@@ -91,4 +85,10 @@ func run(baseDir string, beforeStart, afterStart func() bool) *P2PNetwork {
 	}
 	// gLog.Println(LvINFO, "waiting for connection...")
 	return network
+}
+
+func GetToken(baseDir string) string {
+	os.Chdir(baseDir)
+	gConf.load()
+	return fmt.Sprintf("%d", gConf.Network.Token)
 }
