@@ -292,5 +292,5 @@ func handleLog(pn *P2PNetwork, subType uint16, msg []byte) (err error) {
 	rsp.FileName = req.FileName
 	rsp.Total = fi.Size()
 	rsp.Len = req.Len
-	return pn.write(MsgReport, MsgPushReportLog, &rsp)
+	return pn.write(MsgReport, MsgReportLog, &rsp)
 }

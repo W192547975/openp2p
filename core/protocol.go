@@ -133,7 +133,7 @@ const (
 	MsgReportQuery
 	MsgReportConnect
 	MsgReportApps
-	MsgReportLog
+	MsgReportLog = MsgPushReportLog
 )
 
 const (
