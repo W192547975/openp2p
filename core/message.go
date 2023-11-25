@@ -15,7 +15,7 @@ func EncodeSubPacket(packet interface{}) ([]byte, error) {
 			return e.Encode()
 		}
 		if o, ok := r.(RawPacketOwner); ok {
-			r = o.RawPackat()
+			r = o.RawPacket()
 			continue
 		}
 		break
