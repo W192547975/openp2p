@@ -1,9 +1,20 @@
-package openp2p
+package message
 
 import "encoding/json"
 
 type Encoder interface{ Encode() ([]byte, error) }
 type Decoder interface{ Decode([]byte) error }
+
+type MainTypeMessage interface{ MsgMainType() uint16 }
+type MainTypeEncoder interface {
+	MainTypeMessage
+	Encoder
+}
+type MainTypeDecoder interface {
+	MainTypeMessage
+	Size() int
+	Decoder
+}
 
 type SubTypeMessage interface{ MsgSubType() uint16 }
 type RawPacketOwner interface{ RawPacket() interface{} }
@@ -35,14 +46,14 @@ func (c SubTypeChanger) RawPacket() interface{} {
 	return c.Packet
 }
 
-type RawSubTypeData struct {
+type RawSubData struct {
 	Type uint16
 	Data []byte
 }
 
-func (r RawSubTypeData) MsgSubType() uint16 {
+func (r RawSubData) MsgSubType() uint16 {
 	return r.Type
 }
-func (r RawSubTypeData) Encode() ([]byte, error) {
+func (r RawSubData) Encode() ([]byte, error) {
 	return r.Data, nil
 }
