@@ -7,6 +7,7 @@ import (
 	"hash/crc64"
 	"math/big"
 	"net"
+	"openp2p/core/message"
 	"time"
 )
 
@@ -25,13 +26,9 @@ const (
 	UDPPort2      = 27183
 )
 
-type openP2PHeader struct {
-	DataLen  uint32
-	MainType uint16
-	SubType  uint16
-}
+type openP2PHeader message.OpenP2PHeader
 
-var openP2PHeaderSize = binary.Size(openP2PHeader{})
+var openP2PHeaderSize = message.OpenP2PHeaderSize()
 
 type PushHeader struct {
 	From uint64
