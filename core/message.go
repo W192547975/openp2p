@@ -1,6 +1,25 @@
-package message
+package openp2p
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/binary"
+	"encoding/json"
+)
+
+type OpenP2PHeader struct {
+	DataLen  uint32
+	MainType uint16
+	SubType  uint16
+}
+
+func (head OpenP2PHeader) Encode() ([]byte, error) {
+	headBuf := new(bytes.Buffer)
+	err := binary.Write(headBuf, binary.LittleEndian, head)
+	return headBuf.Bytes(), err
+}
+func (head *OpenP2PHeader) Decode(data []byte) error {
+	return binary.Read(bytes.NewReader(data), binary.LittleEndian, head)
+}
 
 type Encoder interface{ Encode() ([]byte, error) }
 type Decoder interface{ Decode([]byte) error }
