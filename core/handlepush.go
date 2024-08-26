@@ -94,9 +94,9 @@ func handlePush(pn *P2PNetwork, subType uint16, msg []byte) error {
 			gLog.Printf(LvERROR, "wrong %v:%s  %s", reflect.TypeOf(app), err, string(msg[openP2PHeaderSize:]))
 			return err
 		}
-		config := AppConfig{Enabled: app.Enabled, SrcPort: app.SrcPort, Protocol: app.Protocol}
+		config := AppConfig{Enabled: app.Enabled, SrcPort_: app.SrcPort, Protocol_: app.Protocol}
 		gLog.Println(LvINFO, app.AppName, " switch to ", app.Enabled)
-		gConf.switchApp(config, app.Enabled)
+		gConf.switchApp_(config, app.Enabled)
 		if app.Enabled == 0 {
 			// disable APP
 			pn.DeleteApp(config)
@@ -131,19 +131,19 @@ func handleEditApp(pn *P2PNetwork, subType uint16, msg []byte) (err error) {
 	oldConf := AppConfig{Enabled: 1}
 	// protocol0+srcPort0 exist, delApp
 	oldConf.AppName = newApp.AppName
-	oldConf.Protocol = newApp.Protocol0
-	oldConf.Whitelist = newApp.Whitelist
-	oldConf.SrcPort = newApp.SrcPort0
+	oldConf.Protocol_ = newApp.Protocol0
+	oldConf.Whitelist_ = newApp.Whitelist
+	oldConf.SrcPort_ = newApp.SrcPort0
 	oldConf.PeerNode = newApp.PeerNode
-	oldConf.DstHost = newApp.DstHost
-	oldConf.DstPort = newApp.DstPort
+	oldConf.DstHost_ = newApp.DstHost
+	oldConf.DstPort_ = newApp.DstPort
 
-	gConf.delete(oldConf)
+	gConf.delete_(oldConf)
 	// AddApp
 	newConf := oldConf
-	newConf.Protocol = newApp.Protocol
-	newConf.SrcPort = newApp.SrcPort
-	gConf.add(newConf, false)
+	newConf.Protocol_ = newApp.Protocol
+	newConf.SrcPort_ = newApp.SrcPort
+	gConf.add_(newConf, false)
 	pn.DeleteApp(oldConf) // DeleteApp may cost some times, execute at the end
 	return nil
 }
@@ -225,15 +225,15 @@ func handleReportApps(pn *P2PNetwork, subType uint16, msg []byte) (err error) {
 		appInfo := AppInfo{
 			AppName:     config.AppName,
 			Error:       config.errMsg,
-			Protocol:    config.Protocol,
-			Whitelist:   config.Whitelist,
-			SrcPort:     config.SrcPort,
+			Protocol:    config.Protocol_,
+			Whitelist:   config.Whitelist_,
+			SrcPort:     config.SrcPort_,
 			RelayNode:   relayNode,
 			RelayMode:   relayMode,
 			LinkMode:    linkMode,
 			PeerNode:    config.PeerNode,
-			DstHost:     config.DstHost,
-			DstPort:     config.DstPort,
+			DstHost:     config.DstHost_,
+			DstPort:     config.DstPort_,
 			PeerUser:    config.PeerUser,
 			PeerIP:      config.peerIP,
 			PeerNatType: config.peerNatType,

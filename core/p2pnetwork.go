@@ -124,7 +124,7 @@ func (pn *P2PNetwork) Connect(timeout int) bool {
 	return false
 }
 
-func (pn *P2PNetwork) runAll() {
+func (pn *P2PNetwork) runAll_() {
 	gConf.mtx.Lock() // lock for copy gConf.Apps and the modification of config(it's pointer)
 	defer gConf.mtx.Unlock()
 	allApps := gConf.Apps // read a copy, other thread will modify the gConf.Apps
@@ -134,13 +134,13 @@ func (pn *P2PNetwork) runAll() {
 			continue
 		}
 		if config.AppName == "" {
-			config.AppName = config.ID()
+			config.AppName = config.ID_()
 		}
-		if i, ok := pn.apps.Load(config.ID()); ok {
+		if i, ok := pn.apps.Load(config.ID_()); ok {
 			if app := i.(*p2pApp); app.isActive() {
 				continue
 			}
-			pn.DeleteApp(*config)
+			pn.DeleteApp_(*config)
 		}
 
 		if config.retryNum > 0 { // first time not show reconnect log
@@ -155,7 +155,7 @@ func (pn *P2PNetwork) runAll() {
 		config.connectTime = time.Now()
 		config.peerToken = pn.config.Token
 		gConf.mtx.Unlock() // AddApp will take a period of time, let outside modify gConf
-		err := pn.AddApp(*config)
+		err := pn.AddApp_(*config)
 		gConf.mtx.Lock()
 		if err != nil {
 			config.errMsg = err.Error()
@@ -173,7 +173,7 @@ func (pn *P2PNetwork) autorunApp() {
 	defer pn.wgReconnect.Done()
 	for pn.running && pn.online {
 		time.Sleep(time.Second)
-		pn.runAll()
+		pn.runAll_()
 	}
 	gLog.Println(LvINFO, "autorunApp end")
 }
@@ -234,15 +234,15 @@ func (pn *P2PNetwork) addRelayTunnel(config AppConfig) (*P2PTunnel, uint64, stri
 }
 
 // use *AppConfig to save status
-func (pn *P2PNetwork) AddApp(config AppConfig) error {
-	gLog.Printf(LvINFO, "addApp %s to %s:%s:%d start", config.AppName, config.PeerNode, config.DstHost, config.DstPort)
-	defer gLog.Printf(LvINFO, "addApp %s to %s:%s:%d end", config.AppName, config.PeerNode, config.DstHost, config.DstPort)
+func (pn *P2PNetwork) AddApp_(config AppConfig) error {
+	gLog.Printf(LvINFO, "addApp %s to %s:%s:%d start", config.AppName, config.PeerNode, config.DstHost_, config.DstPort_)
+	defer gLog.Printf(LvINFO, "addApp %s to %s:%s:%d end", config.AppName, config.PeerNode, config.DstHost_, config.DstPort_)
 	if !pn.online {
 		return errors.New("P2PNetwork offline")
 	}
 	// check if app already exist?
 	appExist := false
-	_, ok := pn.apps.Load(config.ID())
+	_, ok := pn.apps.Load(config.ID_())
 	if ok {
 		appExist = true
 	}
@@ -275,12 +275,12 @@ func (pn *P2PNetwork) AddApp(config AppConfig) error {
 	}
 	req := ReportConnect{
 		Error:          errMsg,
-		Protocol:       config.Protocol,
-		SrcPort:        config.SrcPort,
+		Protocol:       config.Protocol_,
+		SrcPort:        config.SrcPort_,
 		NatType:        pn.config.natType,
 		PeerNode:       config.PeerNode,
-		DstPort:        config.DstPort,
-		DstHost:        config.DstHost,
+		DstPort:        config.DstPort_,
+		DstHost:        config.DstHost_,
 		PeerNatType:    peerNatType,
 		PeerIP:         peerIP,
 		ShareBandwidth: pn.config.ShareBandwidth,
@@ -306,12 +306,12 @@ func (pn *P2PNetwork) AddApp(config AppConfig) error {
 		key:       appKey,
 		tunnel:    t,
 		config:    config,
-		iptree:    NewIPTree(config.Whitelist),
+		iptree:    NewIPTree(config.Whitelist_),
 		rtid:      rtid,
 		relayNode: relayNode,
 		relayMode: relayMode,
 		hbTime:    time.Now()}
-	pn.apps.Store(config.ID(), &app)
+	pn.apps.Store(config.ID_(), &app)
 	gLog.Printf(LvDEBUG, "%s use tunnel %d", app.config.AppName, app.tunnel.id)
 	if err == nil {
 		go app.listen()
@@ -319,16 +319,16 @@ func (pn *P2PNetwork) AddApp(config AppConfig) error {
 	return err
 }
 
-func (pn *P2PNetwork) DeleteApp(config AppConfig) {
-	gLog.Printf(LvINFO, "DeleteApp %s%d start", config.Protocol, config.SrcPort)
-	defer gLog.Printf(LvINFO, "DeleteApp %s%d end", config.Protocol, config.SrcPort)
+func (pn *P2PNetwork) DeleteApp_(config AppConfig) {
+	gLog.Printf(LvINFO, "DeleteApp %s%d start", config.Protocol_, config.SrcPort_)
+	defer gLog.Printf(LvINFO, "DeleteApp %s%d end", config.Protocol_, config.SrcPort_)
 	// close the apps of this config
-	i, ok := pn.apps.Load(config.ID())
+	i, ok := pn.apps.Load(config.ID_())
 	if ok {
 		app := i.(*p2pApp)
 		gLog.Printf(LvINFO, "app %s exist, delete it", app.config.AppName)
 		app.close()
-		pn.apps.Delete(config.ID())
+		pn.apps.Delete(config.ID_())
 	}
 }
 
@@ -354,8 +354,8 @@ func (pn *P2PNetwork) findTunnel(config *AppConfig) (t *P2PTunnel) {
 }
 
 func (pn *P2PNetwork) addDirectTunnel(config AppConfig, tid uint64) (t *P2PTunnel, err error) {
-	gLog.Printf(LvDEBUG, "addDirectTunnel %s%d to %s:%s:%d tid:%d start", config.Protocol, config.SrcPort, config.PeerNode, config.DstHost, config.DstPort, tid)
-	defer gLog.Printf(LvDEBUG, "addDirectTunnel %s%d to %s:%s:%d tid:%d end", config.Protocol, config.SrcPort, config.PeerNode, config.DstHost, config.DstPort, tid)
+	gLog.Printf(LvDEBUG, "addDirectTunnel to %s tid:%d start", config.PeerNode, tid)
+	defer gLog.Printf(LvDEBUG, "addDirectTunnel to %s tid:%d end", config.PeerNode, tid)
 	isClient := false
 	// client side tid=0, assign random uint64
 	if tid == 0 {

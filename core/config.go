@@ -15,16 +15,16 @@ var gConf Config
 
 type AppConfig struct {
 	// required
-	AppName   string
-	Protocol  string
-	Whitelist string
-	SrcPort   int
-	PeerNode  string
-	DstPort   int
-	DstHost   string
-	PeerUser  string
-	RelayNode string
-	Enabled   int // default:1
+	AppName    string
+	Protocol_  string
+	Whitelist_ string
+	SrcPort_   int
+	PeerNode   string
+	DstPort_   int
+	DstHost_   string
+	PeerUser   string
+	RelayNode  string
+	Enabled    int // default:1
 	// runtime info
 	peerVersion      string
 	peerToken        uint64
@@ -45,8 +45,8 @@ type AppConfig struct {
 	isUnderlayServer int
 }
 
-func (c *AppConfig) ID() string {
-	return fmt.Sprintf("%s%d", c.Protocol, c.SrcPort)
+func (c *AppConfig) ID_() string {
+	return fmt.Sprintf("%s%d", c.Protocol_, c.SrcPort_)
 }
 
 type Config struct {
@@ -57,11 +57,11 @@ type Config struct {
 	mtx        sync.Mutex
 }
 
-func (c *Config) switchApp(app AppConfig, enabled int) {
+func (c *Config) switchApp_(app AppConfig, enabled int) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	for i := 0; i < len(c.Apps); i++ {
-		if c.Apps[i].Protocol == app.Protocol && c.Apps[i].SrcPort == app.SrcPort {
+		if c.Apps[i].Protocol_ == app.Protocol_ && c.Apps[i].SrcPort_ == app.SrcPort_ {
 			c.Apps[i].Enabled = enabled
 			c.Apps[i].retryNum = 0
 			c.Apps[i].nextRetryTime = time.Now()
@@ -81,17 +81,13 @@ func (c *Config) retryApp(peerNode string) {
 	}
 }
 
-func (c *Config) add(app AppConfig, override bool) {
+func (c *Config) add_(app AppConfig, override bool) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	defer c.save()
-	if app.SrcPort == 0 || app.DstPort == 0 {
-		gLog.Println(LvERROR, "invalid app ", app)
-		return
-	}
 	if override {
 		for i := 0; i < len(c.Apps); i++ {
-			if c.Apps[i].Protocol == app.Protocol && c.Apps[i].SrcPort == app.SrcPort {
+			if c.Apps[i].Protocol_ == app.Protocol_ && c.Apps[i].SrcPort_ == app.SrcPort_ {
 				c.Apps[i] = &app // override it
 				return
 			}
@@ -100,15 +96,12 @@ func (c *Config) add(app AppConfig, override bool) {
 	c.Apps = append(c.Apps, &app)
 }
 
-func (c *Config) delete(app AppConfig) {
-	if app.SrcPort == 0 || app.DstPort == 0 {
-		return
-	}
+func (c *Config) delete_(app AppConfig) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	defer c.save()
 	for i := 0; i < len(c.Apps); i++ {
-		if c.Apps[i].Protocol == app.Protocol && c.Apps[i].SrcPort == app.SrcPort {
+		if c.Apps[i].Protocol_ == app.Protocol_ && c.Apps[i].SrcPort_ == app.SrcPort_ {
 			c.Apps = append(c.Apps[:i], c.Apps[i+1:]...)
 			return
 		}
@@ -217,12 +210,12 @@ func parseParams(subCommand string) {
 	token := fset.Uint64("token", 0, "token")
 	node := fset.String("node", "", "node name. 8-31 characters. if not set, it will be hostname")
 	peerNode := fset.String("peernode", "", "peer node name that you want to connect")
-	dstIP := fset.String("dstip", "127.0.0.1", "destination ip ")
-	whiteList := fset.String("whitelist", "", "whitelist for p2pApp ")
-	dstPort := fset.Int("dstport", 0, "destination port ")
-	srcPort := fset.Int("srcport", 0, "source port ")
+	dstIP_ := fset.String("dstip", "127.0.0.1", "destination ip UNUSED")
+	whiteList_ := fset.String("whitelist", "", "whitelist for p2pApp UNUSED")
+	dstPort_ := fset.Int("dstport", 0, "destination port UNUSED")
+	srcPort_ := fset.Int("srcport", 0, "source port UNUSED")
 	tcpPort := fset.Int("tcpport", 0, "tcp port for upnp or publicip")
-	protocol := fset.String("protocol", "tcp", "tcp or udp")
+	protocol_ := fset.String("protocol", "tcp", "tcp or udp UNUSED")
 	appName := fset.String("appname", "", "app name")
 	relayNode := fset.String("relaynode", "", "relaynode")
 	shareBandwidth := fset.Int("sharebandwidth", 10, "N mbps share bandwidth limit, private network no limit")
@@ -238,18 +231,18 @@ func parseParams(subCommand string) {
 
 	config := AppConfig{Enabled: 1}
 	config.PeerNode = *peerNode
-	config.DstHost = *dstIP
-	config.Whitelist = *whiteList
-	config.DstPort = *dstPort
-	config.SrcPort = *srcPort
-	config.Protocol = *protocol
+	config.DstHost_ = *dstIP_
+	config.Whitelist_ = *whiteList_
+	config.DstPort_ = *dstPort_
+	config.SrcPort_ = *srcPort_
+	config.Protocol_ = *protocol_
 	config.AppName = *appName
 	config.RelayNode = *relayNode
 	if !*newconfig {
 		gConf.load() // load old config. otherwise will clear all apps
 	}
-	if config.SrcPort != 0 {
-		gConf.add(config, true)
+	if config.PeerNode != "" {
+		gConf.add_(config, true)
 	}
 	// gConf.mtx.Lock() // when calling this func it's single-thread no lock
 	gConf.daemonMode = *daemonMode
