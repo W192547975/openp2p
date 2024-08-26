@@ -250,7 +250,6 @@ func (pn *P2PNetwork) AddApp_(config AppConfig) error {
 		return errors.New("P2PApp already exist")
 	}
 	appID := rand.Uint64()
-	appKey := uint64(0)
 	var rtid uint64
 	relayNode := ""
 	relayMode := ""
@@ -291,30 +290,17 @@ func (pn *P2PNetwork) AddApp_(config AppConfig) error {
 	if err != nil {
 		return err
 	}
-	if rtid != 0 || t.conn.Protocol() == "tcp" {
-		// sync appkey
-		appKey = rand.Uint64()
-		req := APPKeySync{
-			AppID:  appID,
-			AppKey: appKey,
-		}
-		gLog.Printf(LvDEBUG, "sync appkey to %s", config.PeerNode)
-		pn.push(config.PeerNode, MsgPushAPPKey, &req)
-	}
 	app := p2pApp{
 		id:        appID,
-		key:       appKey,
 		tunnel:    t,
-		config:    config,
-		iptree:    NewIPTree(config.Whitelist_),
 		rtid:      rtid,
 		relayNode: relayNode,
 		relayMode: relayMode,
 		hbTime:    time.Now()}
 	pn.apps.Store(config.ID_(), &app)
-	gLog.Printf(LvDEBUG, "%s use tunnel %d", app.config.AppName, app.tunnel.id)
-	if err == nil {
-		go app.listen()
+	gLog.Printf(LvDEBUG, "%s use tunnel %d", config.AppName, app.tunnel.id)
+	if err == nil && rtid != 0 {
+		go app.startRelayHeartbeat(make(chan error))
 	}
 	return err
 }
@@ -326,7 +312,7 @@ func (pn *P2PNetwork) DeleteApp_(config AppConfig) {
 	i, ok := pn.apps.Load(config.ID_())
 	if ok {
 		app := i.(*p2pApp)
-		gLog.Printf(LvINFO, "app %s exist, delete it", app.config.AppName)
+		gLog.Printf(LvINFO, "app %s exist, delete it", config.AppName) // app.
 		app.close()
 		pn.apps.Delete(config.ID_())
 	}
