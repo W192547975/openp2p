@@ -99,7 +99,7 @@ func handlePush(pn *P2PNetwork, subType uint16, msg []byte) error {
 		gConf.switchApp_(config, app.Enabled)
 		if app.Enabled == 0 {
 			// disable APP
-			pn.DeleteApp(config)
+			pn.DeleteApp_(config)
 		}
 	case MsgPushDstNodeOnline:
 		gLog.Println(LvINFO, "MsgPushDstNodeOnline")
@@ -144,7 +144,7 @@ func handleEditApp(pn *P2PNetwork, subType uint16, msg []byte) (err error) {
 	newConf.Protocol_ = newApp.Protocol
 	newConf.SrcPort_ = newApp.SrcPort
 	gConf.add_(newConf, false)
-	pn.DeleteApp(oldConf) // DeleteApp may cost some times, execute at the end
+	pn.DeleteApp_(oldConf) // DeleteApp may cost some times, execute at the end
 	return nil
 }
 
@@ -212,7 +212,7 @@ func handleReportApps(pn *P2PNetwork, subType uint16, msg []byte) (err error) {
 		relayNode := ""
 		relayMode := ""
 		linkMode := LinkModeUDPPunch
-		i, ok := pn.apps.Load(config.ID())
+		i, ok := pn.apps.Load(config.ID_())
 		if ok {
 			app := i.(*p2pApp)
 			if app.isActive() {
