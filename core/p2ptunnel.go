@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"reflect"
 	"sync"
 	"time"
 )
@@ -21,7 +20,7 @@ type P2PTunnel struct {
 	config        AppConfig
 	la            *net.UDPAddr // local hole address
 	ra            *net.UDPAddr // remote hole address
-	overlayConns  sync.Map     // both TCP and UDP
+	appKeys       map[uint64][AESKeySize]byte
 	id            uint64
 	running       bool
 	runMtx        sync.Mutex
@@ -84,7 +83,7 @@ func (t *P2PTunnel) connect() error {
 	}
 	rsp := PushConnectRsp{}
 	if err := json.Unmarshal(body, &rsp); err != nil {
-		gLog.Printf(LvERROR, "wrong %v:%s", reflect.TypeOf(rsp), err)
+		gLog.Printf(LvERROR, "wrong %T:%s", rsp, err)
 		return err
 	}
 	// gLog.Println(LevelINFO, rsp)
@@ -417,25 +416,17 @@ func (t *P2PTunnel) readLoop() {
 				continue
 			}
 			overlayID := binary.LittleEndian.Uint64(body[:8])
-			gLog.Printf(LvDEBUG, "%d tunnel read overlay data %d bodylen=%d", t.id, overlayID, head.DataLen)
-			s, ok := t.overlayConns.Load(overlayID)
+			gLog.Printf(LvDEBUG, "%d tunnel read overlay data %d bodylen=%d: %x", t.id, overlayID, head.DataLen, body[8:])
+			appKeyBytes, ok := t.appKeys[overlayID]
 			if !ok {
 				// debug level, when overlay connection closed, always has some packet not found tunnel
 				gLog.Printf(LvDEBUG, "%d tunnel not found overlay connection %d", t.id, overlayID)
 				continue
 			}
-			overlayConn, ok := s.(*overlayConn)
-			if !ok {
-				continue
-			}
 			payload := body[overlayHeaderSize:]
-			var err error
-			if overlayConn.appKey != 0 {
-				payload, _ = decryptBytes(overlayConn.appKeyBytes, decryptData, body[overlayHeaderSize:], int(head.DataLen-uint32(overlayHeaderSize)))
-			}
-			_, err = overlayConn.Write(payload)
-			if err != nil {
-				gLog.Println(LvERROR, "overlay write error:", err)
+			if appKeyBytes != [AESKeySize]byte{} {
+				payload, _ = decryptBytes(appKeyBytes[:], decryptData, body[overlayHeaderSize:], int(head.DataLen)-overlayHeaderSize)
+				gLog.Printf(LvDEBUG, "%d decrypted data: %x", overlayID, payload)
 			}
 		case MsgRelayData:
 			if len(body) < 8 {
@@ -447,7 +438,7 @@ func (t *P2PTunnel) readLoop() {
 		case MsgRelayHeartbeat:
 			req := RelayHeartbeat{}
 			if err := json.Unmarshal(body, &req); err != nil {
-				gLog.Printf(LvERROR, "wrong %v:%s", reflect.TypeOf(req), err)
+				gLog.Printf(LvWARN, "wrong %T:%s", req, err)
 				continue
 			}
 			gLog.Printf(LvDEBUG, "read MsgRelayHeartbeat from rtid:%d,appid:%d", req.RelayTunnelID, req.AppID)
@@ -466,62 +457,35 @@ func (t *P2PTunnel) readLoop() {
 			gLog.Printf(LvDEBUG, "read MsgRelayHeartbeatAck to appid:%d", req.AppID)
 			t.pn.updateAppHeartbeat(req.AppID)
 		case MsgOverlayConnectReq:
-			req := OverlayConnectReq{}
+			var req OverlayConnectReq
 			if err := json.Unmarshal(body, &req); err != nil {
-				gLog.Printf(LvERROR, "wrong %v:%s", reflect.TypeOf(req), err)
+				gLog.Printf(LvWARN, "wrong %T:%s", req, err)
 				continue
 			}
-			// app connect only accept token(not relay totp token), avoid someone using the share relay node's token
-			if req.Token != t.pn.config.Token {
-				gLog.Println(LvERROR, "Access Denied:", req.Token)
-				continue
-			}
-
-			overlayID := req.ID
-			gLog.Printf(LvDEBUG, "App:%d overlayID:%d connect %s:%d", req.AppID, overlayID, req.DstIP, req.DstPort)
-			oConn := overlayConn{
-				tunnel:   t,
-				id:       overlayID,
-				isClient: false,
-				rtid:     req.RelayTunnelID,
-				appID:    req.AppID,
-				appKey:   GetKey(req.AppID),
-				running:  true,
-			}
-			if req.Protocol == "udp" {
-				oConn.connUDP, err = net.DialUDP("udp", nil, &net.UDPAddr{IP: net.ParseIP(req.DstIP), Port: req.DstPort})
-			} else {
-				oConn.connTCP, err = net.DialTimeout("tcp", fmt.Sprintf("%s:%d", req.DstIP, req.DstPort), ReadMsgTimeout)
-
-			}
-			if err != nil {
-				gLog.Println(LvERROR, err)
-				continue
-			}
+			gLog.Printf(LvDEBUG, "%d get a overlay connection: %+v", t.id, req)
 
 			// calc key bytes for encrypt
-			if oConn.appKey != 0 {
-				encryptKey := make([]byte, AESKeySize)
-				binary.LittleEndian.PutUint64(encryptKey, oConn.appKey)
-				binary.LittleEndian.PutUint64(encryptKey[8:], oConn.appKey)
-				oConn.appKeyBytes = encryptKey
+			if t.appKeys == nil {
+				t.appKeys = make(map[uint64][AESKeySize]byte)
 			}
+			var encryptKey [AESKeySize]byte
+			appKey := GetKey(req.AppID)
+			if appKey != 0 {
+				gLog.Println(LvDEBUG, req.ID, " has appKey ", appKey)
+			}
+			binary.LittleEndian.PutUint64(encryptKey[:8], appKey)
+			binary.LittleEndian.PutUint64(encryptKey[8:], appKey)
+			t.appKeys[req.ID] = encryptKey
 
-			t.overlayConns.Store(oConn.id, &oConn)
-			go oConn.run()
 		case MsgOverlayDisconnectReq:
 			req := OverlayDisconnectReq{}
 			if err := json.Unmarshal(body, &req); err != nil {
-				gLog.Printf(LvERROR, "wrong %v:%s", reflect.TypeOf(req), err)
+				gLog.Printf(LvWARN, "wrong %T:%s", req, err)
 				continue
 			}
 			overlayID := req.ID
 			gLog.Printf(LvDEBUG, "%d disconnect overlay connection %d", t.id, overlayID)
-			i, ok := t.overlayConns.Load(overlayID)
-			if ok {
-				oConn := i.(*overlayConn)
-				oConn.Close()
-			}
+			delete(t.appKeys, overlayID)
 		default:
 		}
 	}
@@ -580,14 +544,4 @@ func (t *P2PTunnel) listen() error {
 	gLog.Printf(LvDEBUG, "p2ptunnel wait for connecting")
 	t.tunnelServer = true
 	return t.start()
-}
-
-func (t *P2PTunnel) closeOverlayConns(appID uint64) {
-	t.overlayConns.Range(func(_, i interface{}) bool {
-		oConn := i.(*overlayConn)
-		if oConn.appID == appID {
-			oConn.Close()
-		}
-		return true
-	})
 }
