@@ -14,9 +14,9 @@ type p2pApp struct {
 	relayMode string
 	hbTime    time.Time
 	hbMtx     sync.Mutex
-	running   bool
 	id        uint64
-	wg        sync.WaitGroup
+	runMtx    sync.Mutex
+	stop      chan error
 }
 
 func (app *p2pApp) isActive() bool {
@@ -39,31 +39,51 @@ func (app *p2pApp) updateHeartbeat() {
 }
 
 func (app *p2pApp) close() {
-	app.running = false
-	if app.tunnel != nil {
-		app.tunnel.closeOverlayConns(app.id)
+	app.runMtx.Lock()
+	stop := app.stop
+	app.runMtx.Unlock() // care deadlock
+	if stop != nil {
+		<-stop // ignore error
 	}
-	app.wg.Wait()
 }
 
 // TODO: many relay app on the same P2PTunnel will send a lot of relay heartbeat
-func (app *p2pApp) relayHeartbeatLoop() {
-	app.wg.Add(1)
-	defer app.wg.Done()
-	gLog.Printf(LvDEBUG, "relayHeartbeat to rtid:%d start", app.rtid)
-	defer gLog.Printf(LvDEBUG, "relayHeartbeat to rtid%d end", app.rtid)
+func (app *p2pApp) startRelayHeartbeat(stop chan error) {
+	// app.runMtx.Lock()
+	app.stop = stop
+	// app.runMtx.Unlock()
 	var msgWithHead bytes.Buffer
 	binary.Write(&msgWithHead, binary.LittleEndian, app.rtid)
 	req := RelayHeartbeat{RelayTunnelID: app.tunnel.id, AppID: app.id}
 	msg, _ := newMessage(MsgP2P, MsgRelayHeartbeat, &req)
 	msgWithHead.Write(msg)
-	for app.tunnel.isRuning() && app.running {
-		err := app.tunnel.conn.WriteBytes(MsgP2P, MsgRelayData, msgWithHead.Bytes())
-		if err != nil {
-			gLog.Printf(LvERROR, "%d app write relay tunnel heartbeat error %s", app.rtid, err)
-			return
+	go func(msgData []byte) {
+		gLog.Printf(LvDEBUG, "relayHeartbeat to rtid:%d start", app.rtid)
+		defer gLog.Printf(LvDEBUG, "relayHeartbeat to rtid%d end", app.rtid)
+		for app.tunnel.isRuning() {
+			// app.runMtx.Lock()
+			// var stop = app.stop
+			// app.runMtx.Unlock()
+			select {
+			case app.stop <- nil:
+				return
+			default:
+				err := app.tunnel.conn.WriteBytes(MsgP2P, MsgRelayData, msgData)
+				if err != nil {
+					gLog.Printf(LvERROR, "%d app write relay tunnel heartbeat error %s", app.rtid, err)
+					app.runMtx.Lock()
+					stop := app.stop
+					if stop == nil {
+						stop = make(chan error, 1)
+						app.stop = stop
+					}
+					app.runMtx.Unlock() // care deadlock
+					stop <- err
+					return
+				}
+				gLog.Printf(LvDEBUG, "%d app write relay tunnel heartbeat ok", app.rtid)
+				time.Sleep(TunnelHeartbeatTime)
+			}
 		}
-		gLog.Printf(LvDEBUG, "%d app write relay tunnel heartbeat ok", app.rtid)
-		time.Sleep(TunnelHeartbeatTime)
-	}
+	}(msgWithHead.Bytes())
 }
